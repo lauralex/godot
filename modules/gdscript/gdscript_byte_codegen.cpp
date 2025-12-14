@@ -965,6 +965,12 @@ void GDScriptByteCodeGenerator::write_assign_with_conversion(const Address &p_ta
 	}
 }
 
+void GDScriptByteCodeGenerator::write_append_array(const Address &p_target, const Address &p_source) {
+	append_opcode(GDScriptFunction::OPCODE_APPEND_ARRAY);
+	append(p_target);
+	append(p_source);
+}
+
 void GDScriptByteCodeGenerator::write_assign(const Address &p_target, const Address &p_source) {
 	if (p_target.type.kind == GDScriptDataType::BUILTIN && p_target.type.builtin_type == Variant::ARRAY && p_target.type.has_container_element_type(0)) {
 		const GDScriptDataType &element_type = p_target.type.get_container_element_type(0);

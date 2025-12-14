@@ -406,6 +406,7 @@ void (*type_init_function_table[])(Variant *) = {
 		&&OPCODE_TYPE_ADJUST_PACKED_VECTOR3_ARRAY,       \
 		&&OPCODE_TYPE_ADJUST_PACKED_COLOR_ARRAY,         \
 		&&OPCODE_TYPE_ADJUST_PACKED_VECTOR4_ARRAY,       \
+		&&OPCODE_APPEND_ARRAY,                           \
 		&&OPCODE_ASSERT,                                 \
 		&&OPCODE_BREAKPOINT,                             \
 		&&OPCODE_LINE,                                   \
@@ -1608,6 +1609,22 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 				*dst = *src;
 
 				ip += 4;
+			}
+			DISPATCH_OPCODE;
+
+			OPCODE(OPCODE_APPEND_ARRAY) {
+				CHECK_SPACE(3);
+				GET_VARIANT_PTR(dst, 0);
+				GET_VARIANT_PTR(src, 1);
+
+				if (likely(dst->get_type() == Variant::ARRAY)) {
+					Array *arr = VariantInternal::get_array(dst);
+					arr->append(*src);
+				} else {
+					err_text = "Invalid operand for array append (+=). Left operand must be an Array.";
+					OPCODE_BREAK;
+				}
+				ip += 3;
 			}
 			DISPATCH_OPCODE;
 

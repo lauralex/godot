@@ -1345,13 +1345,34 @@ GDScriptCodeGenerator::Address GDScriptCompiler::_parse_expression(CodeGen &code
 				bool has_operation = assignment->operation != GDScriptParser::AssignmentNode::OP_NONE;
 				if (has_operation) {
 					// Perform operation.
-					GDScriptCodeGenerator::Address op_result = codegen.add_temporary(_gdtype_from_datatype(assignment->get_datatype(), codegen.script));
-					GDScriptCodeGenerator::Address og_value = _parse_expression(codegen, r_error, assignment->assignee);
-					gen->write_binary_operator(op_result, assignment->variant_op, og_value, assigned_value);
-					to_assign = op_result;
+					// Check for Array += Element optimization
+					if (assignment->operation == GDScriptParser::AssignmentNode::OP_ADDITION &&
+							target.type.has_type &&
+							target.type.builtin_type == Variant::ARRAY &&
+							assignment->assigned_value->get_datatype().builtin_type != Variant::ARRAY) {
+						// Use specific opcode for appending to array in-place
+						gen->write_append_array(target, assigned_value);
 
-					if (og_value.mode == GDScriptCodeGenerator::Address::TEMPORARY) {
-						gen->pop_temporary();
+						// We are modifying in-place, so we don't need to re-assign 'to_assign'
+						// for the subsequent write_assign call unless it's a setter/property.
+						// However, to keep flow simple for members/setters, we can treat the target
+						// as the result.
+						to_assign = target;
+
+						// Note: logic below needs to know we handled the operation.
+						// For simple local variables, we are done.
+						// For setters/members, we might technically need to set it back,
+						// though Array is shared by reference so it usually updates automatically.
+
+					} else {
+						GDScriptCodeGenerator::Address op_result = codegen.add_temporary(_gdtype_from_datatype(assignment->get_datatype(), codegen.script));
+						GDScriptCodeGenerator::Address og_value = _parse_expression(codegen, r_error, assignment->assignee);
+						gen->write_binary_operator(op_result, assignment->variant_op, og_value, assigned_value);
+						to_assign = op_result;
+
+						if (og_value.mode == GDScriptCodeGenerator::Address::TEMPORARY) {
+							gen->pop_temporary();
+						}
 					}
 				} else {
 					to_assign = assigned_value;

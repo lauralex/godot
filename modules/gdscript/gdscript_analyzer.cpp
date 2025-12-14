@@ -2963,6 +2963,15 @@ void GDScriptAnalyzer::reduce_assignment(GDScriptParser::AssignmentNode *p_assig
 	if (p_assignment->operation != GDScriptParser::AssignmentNode::OP_NONE && !op_type.is_variant()) {
 		op_type = get_operation_type(p_assignment->variant_op, assignee_type, assigned_value_type, compatible, p_assignment->assigned_value);
 
+		// Special case: Array += Element (Append)
+		// If adding to an Array, and the value is NOT an array, allow it (treated as append).
+		if (p_assignment->operation == GDScriptParser::AssignmentNode::OP_ADDITION && assignee_type.builtin_type == Variant::ARRAY) {
+			if (assigned_value_type.builtin_type != Variant::ARRAY) {
+				compatible = true;
+				op_type    = assignee_type;
+			}
+		}
+
 		if (assignee_is_variant) {
 			// variant assignee
 			mark_node_unsafe(p_assignment);
@@ -3043,7 +3052,7 @@ void GDScriptAnalyzer::reduce_assignment(GDScriptParser::AssignmentNode *p_assig
 	if (p_assignment->operation != GDScriptParser::AssignmentNode::OP_NONE && p_assignment->assignee->type == GDScriptParser::Node::IDENTIFIER) {
 		GDScriptParser::IdentifierNode *id = static_cast<GDScriptParser::IdentifierNode *>(p_assignment->assignee);
 		// Use == 1 here because this assignment was already counted in the beginning of the function.
-		if (id->source == GDScriptParser::IdentifierNode::LOCAL_VARIABLE && id->variable_source && id->variable_source->assignments == 1) {
+		if (id->source == GDScriptParser::IdentifierNode::LOCAL_VARIABLE && id->variable_source && id->variable_source->assignments == 1 && !(p_assignment->operation == GDScriptParser::AssignmentNode::OP_ADDITION && assignee_type.builtin_type == Variant::ARRAY)) {
 			parser->push_warning(p_assignment, GDScriptWarning::UNASSIGNED_VARIABLE_OP_ASSIGN, id->name, Variant::get_operator_name(p_assignment->variant_op));
 		}
 	}

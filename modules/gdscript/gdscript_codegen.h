@@ -115,6 +115,7 @@ public:
 	virtual void write_get_static_variable(const Address &p_target, const Address &p_class, int p_index) = 0;
 	virtual void write_assign(const Address &p_target, const Address &p_source) = 0;
 	virtual void write_assign_with_conversion(const Address &p_target, const Address &p_source) = 0;
+	virtual void write_append_array(const Address &p_target, const Address &p_source) = 0;
 	virtual void write_assign_null(const Address &p_target) = 0;
 	virtual void write_assign_true(const Address &p_target) = 0;
 	virtual void write_assign_false(const Address &p_target) = 0;

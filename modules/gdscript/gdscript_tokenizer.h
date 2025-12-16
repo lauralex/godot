@@ -83,6 +83,8 @@ public:
 			// Assignment
 			EQUAL,
 			PLUS_EQUAL,
+			INCREMENT,
+			DECREMENT,
 			MINUS_EQUAL,
 			STAR_EQUAL,
 			STAR_STAR_EQUAL,

@@ -1941,6 +1941,11 @@ GDScriptParser::Node *GDScriptParser::parse_statement() {
 	}
 
 	switch (current.type) {
+		case GDScriptTokenizer::Token::INCREMENT:
+		case GDScriptTokenizer::Token::DECREMENT:
+			// This handles ++i (prefix)
+			push_error("Increment/Decrement operators are only supported as postfix (variable++) in this implementation.");
+			break;
 		case GDScriptTokenizer::Token::PASS:
 			advance();
 			result = alloc_node<PassNode>();
@@ -2033,21 +2038,51 @@ GDScriptParser::Node *GDScriptParser::parse_statement() {
 		default: {
 			// Expression statement.
 			ExpressionNode *expression = parse_expression(true); // Allow assignment here.
-			bool has_ended_lambda = false;
-			if (expression == nullptr) {
-				if (in_lambda) {
-					// If it's not a valid expression beginning, it might be the continuation of the outer expression where this lambda is.
-					lambda_ended = true;
-					has_ended_lambda = true;
-				} else {
-					advance();
-					push_error(vformat(R"(Expected statement, found "%s" instead.)", previous.get_name()));
-				}
+
+			// Check for Postfix ++ / --
+			if (expression != nullptr && (check(GDScriptTokenizer::Token::INCREMENT) || check(GDScriptTokenizer::Token::DECREMENT))) {
+				// 1. Determine operation type
+				bool is_inc = check(GDScriptTokenizer::Token::INCREMENT); // Advances 'current' to next, makes 'previous' the ++/--
+				advance();
+
+				// 2. Allocate the new node
+				UnaryOpNode *inc_node = alloc_node<UnaryOpNode>();
+
+				// 3. Link the operand (the variable we just parsed)
+				inc_node->operand = expression;
+				inc_node->operation = is_inc ? UnaryOpNode::OP_INCREMENT : UnaryOpNode::OP_DECREMENT;
+				inc_node->variant_op = is_inc ? Variant::OP_POSITIVE : Variant::OP_NEGATE;
+
+				// 4. SETUP EXTENTS
+				// Start position is inherited from the operand (the variable)
+				inc_node->start_line = expression->start_line;
+				inc_node->start_column = expression->start_column;
+
+				// End position is determined by the 'previous' token (the ++ or -- we just matched)
+				// update_extents() uses 'previous' internally to set end_line/end_column
+				update_extents(inc_node);
+
+				complete_extents(inc_node);
+
+				result = inc_node;
+				end_statement("increment/decrement");
 			} else {
-				end_statement("expression");
+				bool has_ended_lambda = false;
+				if (expression == nullptr) {
+					if (in_lambda) {
+						// If it's not a valid expression beginning, it might be the continuation of the outer expression where this lambda is.
+						lambda_ended = true;
+						has_ended_lambda = true;
+					} else {
+						advance();
+						push_error(vformat(R"(Expected statement, found "%s" instead.)", previous.get_name()));
+					}
+				} else {
+					end_statement("expression");
+				}
+				lambda_ended = lambda_ended || has_ended_lambda;
+				result = expression;
 			}
-			lambda_ended = lambda_ended || has_ended_lambda;
-			result = expression;
 
 #ifdef DEBUG_ENABLED
 			if (expression != nullptr) {
@@ -2075,7 +2110,8 @@ GDScriptParser::Node *GDScriptParser::parse_statement() {
 						push_warning(expression, GDScriptWarning::STANDALONE_TERNARY);
 						break;
 					default:
-						push_warning(expression, GDScriptWarning::STANDALONE_EXPRESSION);
+						if (result->type != Node::UNARY_OPERATOR)
+							push_warning(expression, GDScriptWarning::STANDALONE_EXPRESSION);
 				}
 			}
 #endif
@@ -4158,6 +4194,8 @@ GDScriptParser::ParseRule *GDScriptParser::get_rule(GDScriptTokenizer::Token::Ty
 		// Assignment
 		{ nullptr,                                          &GDScriptParser::parse_assignment,           	PREC_ASSIGNMENT }, // EQUAL,
 		{ nullptr,                                          &GDScriptParser::parse_assignment,           	PREC_ASSIGNMENT }, // PLUS_EQUAL,
+		{ nullptr,                                          nullptr,           									  PREC_NONE }, // INCREMENT,
+		{ nullptr,                                          nullptr,           									  PREC_NONE }, // DECREMENT,
 		{ nullptr,                                          &GDScriptParser::parse_assignment,           	PREC_ASSIGNMENT }, // MINUS_EQUAL,
 		{ nullptr,                                          &GDScriptParser::parse_assignment,           	PREC_ASSIGNMENT }, // STAR_EQUAL,
 		{ nullptr,                                          &GDScriptParser::parse_assignment,           	PREC_ASSIGNMENT }, // STAR_STAR_EQUAL,

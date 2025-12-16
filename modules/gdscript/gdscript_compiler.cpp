@@ -849,6 +849,36 @@ GDScriptCodeGenerator::Address GDScriptCompiler::_parse_expression(CodeGen &code
 		case GDScriptParser::Node::UNARY_OPERATOR: {
 			const GDScriptParser::UnaryOpNode *unary = static_cast<const GDScriptParser::UnaryOpNode *>(p_expression);
 
+			if (unary->operation == GDScriptParser::UnaryOpNode::OP_INCREMENT || unary->operation == GDScriptParser::UnaryOpNode::OP_DECREMENT) {
+				// 1. Recursively parse the operand to get its Address
+				// For "i++", this returns the Address of "i" (e.g., LOCAL_VARIABLE, stack index 5)
+				GDScriptCodeGenerator::Address operand_addr = _parse_expression(codegen, r_error, unary->operand);
+
+				if (r_error) {
+					return GDScriptCodeGenerator::Address();
+				}
+
+				// 2. Validate that we can actually write to this address
+				if (operand_addr.mode == GDScriptCodeGenerator::Address::CONSTANT) {
+					_set_error("Cannot increment/decrement a constant.", unary);
+					r_error = ERR_COMPILATION_FAILED;
+					return GDScriptCodeGenerator::Address();
+				}
+
+				// 3. Generate the bytecode
+				if (unary->operation == GDScriptParser::UnaryOpNode::OP_INCREMENT) {
+					gen->write_increment(operand_addr);
+				} else {
+					gen->write_decrement(operand_addr);
+				}
+
+				// 4. Return the address.
+				// In C++, i++ returns the original value, ++i returns new.
+				// Since we implemented this as a Statement in the parser, the return value isn't
+				// strictly captured, but returning the operand address maintains consistency.
+				return operand_addr;
+			}
+
 			GDScriptCodeGenerator::Address result = codegen.add_temporary(_gdtype_from_datatype(unary->get_datatype(), codegen.script));
 
 			GDScriptCodeGenerator::Address operand = _parse_expression(codegen, r_error, unary->operand);

@@ -1229,6 +1229,8 @@ public:
 			OP_NEGATIVE,
 			OP_COMPLEMENT,
 			OP_LOGIC_NOT,
+			OP_INCREMENT,
+			OP_DECREMENT,
 		};
 
 		OpType operation = OP_POSITIVE;

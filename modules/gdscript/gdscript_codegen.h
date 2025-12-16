@@ -92,6 +92,8 @@ public:
 
 	virtual void write_type_adjust(const Address &p_target, Variant::Type p_new_type) = 0;
 	virtual void write_unary_operator(const Address &p_target, Variant::Operator p_operator, const Address &p_left_operand) = 0;
+	virtual void write_increment(const Address &p_target) = 0;
+	virtual void write_decrement(const Address &p_target) = 0;
 	virtual void write_binary_operator(const Address &p_target, Variant::Operator p_operator, const Address &p_left_operand, const Address &p_right_operand) = 0;
 	virtual void write_type_test(const Address &p_target, const Address &p_source, const GDScriptDataType &p_type) = 0;
 	virtual void write_and_left_operand(const Address &p_left_operand) = 0;

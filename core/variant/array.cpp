@@ -313,6 +313,13 @@ Error Array::resize(int p_new_size) {
 	return err;
 }
 
+Error Array::reserve(int p_capacity) {
+	ERR_FAIL_COND_V_MSG(_p->read_only, ERR_LOCKED, "Array is in read-only state.");
+
+	Error err = _p->array.reserve(p_capacity);
+	return err;
+}
+
 Error Array::insert(int p_pos, const Variant &p_value) {
 	ERR_FAIL_COND_V_MSG(_p->read_only, ERR_LOCKED, "Array is in read-only state.");
 	Variant value = p_value;

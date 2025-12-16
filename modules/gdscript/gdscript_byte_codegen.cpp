@@ -581,6 +581,18 @@ void GDScriptByteCodeGenerator::write_unary_operator(const Address &p_target, Va
 	}
 }
 
+// New write_increment function
+void GDScriptByteCodeGenerator::write_increment(const Address &p_target) {
+	append_opcode(GDScriptFunction::OPCODE_INCREMENT);
+	append(p_target);
+}
+
+// New write_decrement function
+void GDScriptByteCodeGenerator::write_decrement(const Address &p_target) {
+	append_opcode(GDScriptFunction::OPCODE_DECREMENT);
+	append(p_target);
+}
+
 void GDScriptByteCodeGenerator::write_binary_operator(const Address &p_target, Variant::Operator p_operator, const Address &p_left_operand, const Address &p_right_operand) {
 	bool valid = HAS_BUILTIN_TYPE(p_left_operand) && HAS_BUILTIN_TYPE(p_right_operand);
 

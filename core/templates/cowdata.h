@@ -52,16 +52,17 @@ public:
 	static constexpr USize MAX_INT = INT64_MAX;
 
 private:
-	// Alignment:  ↓ max_align_t           ↓ USize          ↓ max_align_t
-	//             ┌────────────────────┬──┬─────────────┬──┬───────────...
-	//             │ SafeNumeric<USize> │░░│ USize       │░░│ T[]
-	//             │ ref. count         │░░│ data size   │░░│ data
-	//             └────────────────────┴──┴─────────────┴──┴───────────...
-	// Offset:     ↑ REF_COUNT_OFFSET      ↑ SIZE_OFFSET    ↑ DATA_OFFSET
+	// Alignment:  ↓ max_align_t           ↓ USize          ↓ USize              ↓ max_align_t
+	//             ┌────────────────────┬──┬─────────────┬──┬────────------───┬──┬───────────...
+	//             │ SafeNumeric<USize> │░░│ USize       │░░│ USize		      │░░│ T[]
+	//             │ ref. count         │░░│ data size   │░░│ data capacity	  │░░│ data
+	//             └────────────────────┴──┴─────────────┴──┴─────────------──┴──┴───────────...
+	// Offset:     ↑ REF_COUNT_OFFSET      ↑ SIZE_OFFSET    ↑ CAPACITY_OFFSET    ↑ DATA_OFFSET
 
 	static constexpr size_t REF_COUNT_OFFSET = 0;
 	static constexpr size_t SIZE_OFFSET = ((REF_COUNT_OFFSET + sizeof(SafeNumeric<USize>)) % alignof(USize) == 0) ? (REF_COUNT_OFFSET + sizeof(SafeNumeric<USize>)) : ((REF_COUNT_OFFSET + sizeof(SafeNumeric<USize>)) + alignof(USize) - ((REF_COUNT_OFFSET + sizeof(SafeNumeric<USize>)) % alignof(USize)));
-	static constexpr size_t DATA_OFFSET = ((SIZE_OFFSET + sizeof(USize)) % alignof(max_align_t) == 0) ? (SIZE_OFFSET + sizeof(USize)) : ((SIZE_OFFSET + sizeof(USize)) + alignof(max_align_t) - ((SIZE_OFFSET + sizeof(USize)) % alignof(max_align_t)));
+	static constexpr size_t CAPACITY_OFFSET = ((SIZE_OFFSET + sizeof(USize)) % alignof(USize) == 0) ? (SIZE_OFFSET + sizeof(USize)) : ((SIZE_OFFSET + sizeof(USize)) + alignof(USize) - ((SIZE_OFFSET + sizeof(USize)) % alignof(USize)));
+	static constexpr size_t DATA_OFFSET = ((CAPACITY_OFFSET + sizeof(USize)) % alignof(max_align_t) == 0) ? (CAPACITY_OFFSET + sizeof(USize)) : ((CAPACITY_OFFSET + sizeof(USize)) + alignof(max_align_t) - ((CAPACITY_OFFSET + sizeof(USize)) % alignof(max_align_t)));
 
 	mutable T *_ptr = nullptr;
 
@@ -85,6 +86,13 @@ private:
 		}
 
 		return (USize *)((uint8_t *)_ptr - DATA_OFFSET + SIZE_OFFSET);
+	}
+
+	_FORCE_INLINE_ USize *_get_capacity() const {
+		if (!_ptr) {
+			return nullptr;
+		}
+		return (USize *)((uint8_t *)_ptr - DATA_OFFSET + CAPACITY_OFFSET);
 	}
 
 	_FORCE_INLINE_ static USize _get_alloc_size(USize p_elements) {
@@ -217,6 +225,55 @@ public:
 		return OK;
 	}
 
+	Error reserve(Size p_capacity) {
+		if (p_capacity <= 0) {
+			return OK; // Do nothing
+		}
+
+		if (!_ptr) {
+			// New allocation
+			USize alloc_size;
+			if (!_get_alloc_size_checked(p_capacity, &alloc_size)) {
+				return ERR_OUT_OF_MEMORY;
+			}
+			Error err = _alloc(alloc_size);
+			if (err) {
+				return err;
+			}
+			*_get_size() = 0; // Size is 0, Capacity is set in _alloc
+			return OK;
+		}
+
+		// We have data
+		if (_get_refcount()->get() > 1) {
+			// COW: We must detach and copy if we want to reserve
+			// (Standard vectors usually don't COW, but here we must ensure uniqueness)
+			if (Error err = _fork_allocate(size()); err) {
+				return err;
+			}
+		}
+
+		USize current_cap = *_get_capacity();
+		if (p_capacity <= (Size)current_cap) {
+			return OK;
+		}
+
+		// Grow
+		USize alloc_size;
+		if (!_get_alloc_size_checked(p_capacity, &alloc_size)) {
+			return ERR_OUT_OF_MEMORY;
+		}
+		return _realloc(alloc_size);
+	}
+
+	// Add capacity getter for Vector to use
+	_FORCE_INLINE_ Size capacity() const {
+		if (!_ptr) {
+			return 0;
+		}
+		return (Size)*_get_capacity();
+	}
+
 	_FORCE_INLINE_ operator Span<T>() const { return Span<T>(ptr(), size()); }
 	_FORCE_INLINE_ Span<T> span() const { return operator Span<T>(); }
 
@@ -273,6 +330,9 @@ void CowData<T>::_unref() {
 
 template <typename T>
 Error CowData<T>::_fork_allocate(USize p_size) {
+	// If p_size is 0, we generally unref, but if we want to support
+	// reserve() keeping memory on clear(), we need explicit clear logic.
+	// For now, let's keep standard behavior: resize(0) frees.
 	if (p_size == 0) {
 		// Wants to clean up.
 		_unref();
@@ -307,11 +367,16 @@ Error CowData<T>::_fork_allocate(USize p_size) {
 			}
 		}
 
-		if (alloc_size != _get_alloc_size(prev_size)) {
-			const Error error = _realloc(alloc_size);
-			if (error) {
-				// Out of memory; the current array is still valid though.
-				return error;
+		USize current_cap = *_get_capacity();
+
+		if (p_size > current_cap)
+		{
+			if (alloc_size != _get_alloc_size(prev_size)) {
+				const Error error = _realloc(alloc_size);
+				if (error) {
+					// Out of memory; the current array is still valid though.
+					return error;
+				}
 			}
 		}
 	} else {
@@ -388,6 +453,10 @@ Error CowData<T>::_alloc(USize p_alloc_size) {
 	// If we alloc, we're guaranteed to be the only reference.
 	new (_get_refcount()) SafeNumeric<USize>(1);
 
+	// --- NEW: Store Capacity (in elements) ---
+	*_get_capacity() = p_alloc_size / sizeof(T);
+	// -----------------------------------------
+
 	return OK;
 }
 
@@ -401,6 +470,10 @@ Error CowData<T>::_realloc(USize p_alloc_size) {
 	// If we realloc, we're guaranteed to be the only reference.
 	// So the reference was 1 and was copied to be 1 again.
 	DEV_ASSERT(_get_refcount()->get() == 1);
+
+	// --- NEW: Store Capacity (in elements) ---
+	*_get_capacity() = p_alloc_size / sizeof(T);
+	// -----------------------------------------
 
 	return OK;
 }

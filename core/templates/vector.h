@@ -106,6 +106,12 @@ public:
 		return _cowdata.template resize<!std::is_trivially_constructible_v<T>>(p_size);
 	}
 
+	_FORCE_INLINE_ Size capacity() const { return _cowdata.capacity(); }
+
+	Error reserve(Size p_capacity) {
+		return _cowdata.reserve(p_capacity);
+	}
+
 	/// Resize and set all values to 0 / false / nullptr.
 	/// This is only available for zero constructible types.
 	_FORCE_INLINE_ Error resize_initialized(Size p_size) {

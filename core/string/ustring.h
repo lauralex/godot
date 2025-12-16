@@ -330,6 +330,7 @@ public:
 	/// Resizes the string. The given size must include the null terminator.
 	/// New characters are not initialized, and should be set by the caller.
 	Error resize_uninitialized(int64_t p_size) { return _cowdata.resize<false>(p_size); }
+	Error reserve(int64_t p_capacity) { return _cowdata.reserve(p_capacity); }
 
 	_FORCE_INLINE_ const char32_t &operator[](int p_index) const {
 		if (unlikely(p_index == _cowdata.size())) {

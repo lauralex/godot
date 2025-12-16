@@ -253,6 +253,8 @@ void (*type_init_function_table[])(Variant *) = {
 #define OPCODES_TABLE                                    \
 	static const void *switch_table_ops[] = {            \
 		&&OPCODE_OPERATOR,                               \
+		&&OPCODE_INCREMENT,                              \
+		&&OPCODE_DECREMENT,                              \
 		&&OPCODE_OPERATOR_VALIDATED,                     \
 		&&OPCODE_TYPE_TEST_BUILTIN,                      \
 		&&OPCODE_TYPE_TEST_ARRAY,                        \
@@ -830,6 +832,53 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 #endif
 				}
 				ip += 7 + _pointer_size;
+			}
+			DISPATCH_OPCODE;
+
+			OPCODE(OPCODE_INCREMENT) {
+				CHECK_SPACE(2);
+				// This macro grabs the pointer to the actual value in memory based on the address passed by the compiler
+				GET_VARIANT_PTR(dst, 0);
+
+				if (likely(dst->get_type() == Variant::INT)) {
+					// Direct pointer access for speed
+					*VariantInternal::get_int(dst) += 1;
+				} else if (likely(dst->get_type() == Variant::FLOAT)) {
+					*VariantInternal::get_float(dst) += 1.0;
+				} else {
+					// Fallback for Vector2, Vector3, or custom types overloading +
+					bool valid;
+					Variant::evaluate(Variant::OP_ADD, *dst, 1, *dst, valid);
+#ifdef DEBUG_ENABLED
+					if (!valid) {
+						err_text = "Cannot increment value of type " + Variant::get_type_name(dst->get_type());
+						OPCODE_BREAK;
+					}
+#endif
+				}
+				ip += 2;
+			}
+			DISPATCH_OPCODE;
+
+			OPCODE(OPCODE_DECREMENT) {
+				CHECK_SPACE(2);
+				GET_VARIANT_PTR(dst, 0);
+
+				if (likely(dst->get_type() == Variant::INT)) {
+					*VariantInternal::get_int(dst) -= 1;
+				} else if (likely(dst->get_type() == Variant::FLOAT)) {
+					*VariantInternal::get_float(dst) -= 1.0;
+				} else {
+					bool valid;
+					Variant::evaluate(Variant::OP_SUBTRACT, *dst, 1, *dst, valid);
+#ifdef DEBUG_ENABLED
+					if (!valid) {
+						err_text = "Cannot decrement value of type " + Variant::get_type_name(dst->get_type());
+						OPCODE_BREAK;
+					}
+#endif
+				}
+				ip += 2;
 			}
 			DISPATCH_OPCODE;
 

@@ -202,6 +202,7 @@ opts.Add(BoolVariable("use_volk", "Use the volk library to load the Vulkan loade
 opts.Add(BoolVariable("accesskit", "Use AccessKit C SDK", True))
 opts.Add(("accesskit_sdk_path", "Path to the AccessKit C SDK", ""))
 opts.Add(BoolVariable("sdl", "Enable the SDL3 input driver", True))
+opts.Add(BoolVariable("use_mimalloc", "Use mimalloc allocator", False))
 
 # Advanced options
 opts.Add(
@@ -1148,6 +1149,11 @@ if "cpp_compiler_launcher" in env:
 
 # Build subdirs, the build order is dependent on link order.
 Export("env")
+
+if env["use_mimalloc"]:
+    env.Append(CPPDEFINES=["USE_MIMALLOC"])
+    env.Prepend(CPPPATH=["#thirdparty/mimalloc"])
+    SConscript("thirdparty/mimalloc/SCsub")
 
 SConscript("core/SCsub")
 SConscript("servers/SCsub")

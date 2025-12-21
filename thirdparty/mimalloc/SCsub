@@ -1,0 +1,15 @@
+# SCsub
+
+Import('env')
+
+env_mimalloc = env.Clone()
+# env_mimalloc.disable_warnings()
+
+# Add mimalloc sources
+sources = env_mimalloc.Glob("*.c")
+
+# Create the library
+lib = env_mimalloc.add_library("mimalloc", sources)
+
+# Add to the list of libraries to link against
+env.Prepend(LIBS=[lib])

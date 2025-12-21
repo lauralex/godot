@@ -64,6 +64,9 @@ SafeNumeric<uint64_t> Memory::max_usage;
 void *Memory::alloc_aligned_static(size_t p_bytes, size_t p_alignment) {
 	DEV_ASSERT(is_power_of_2(p_alignment));
 
+#ifdef USE_MIMALLOC
+	return mi_malloc_aligned(p_bytes, p_alignment);
+#else
 	void *p1, *p2;
 	if ((p1 = (void *)malloc(p_bytes + p_alignment - 1 + sizeof(uint32_t))) == nullptr) {
 		return nullptr;
@@ -72,9 +75,13 @@ void *Memory::alloc_aligned_static(size_t p_bytes, size_t p_alignment) {
 	p2 = (void *)(((uintptr_t)p1 + sizeof(uint32_t) + p_alignment - 1) & ~((p_alignment)-1));
 	*((uint32_t *)p2 - 1) = (uint32_t)((uintptr_t)p2 - (uintptr_t)p1);
 	return p2;
+#endif
 }
 
 void *Memory::realloc_aligned_static(void *p_memory, size_t p_bytes, size_t p_prev_bytes, size_t p_alignment) {
+#ifdef USE_MIMALLOC
+	return mi_realloc_aligned(p_memory, p_bytes, p_alignment);
+#else
 	if (p_memory == nullptr) {
 		return alloc_aligned_static(p_bytes, p_alignment);
 	}
@@ -85,12 +92,17 @@ void *Memory::realloc_aligned_static(void *p_memory, size_t p_bytes, size_t p_pr
 	}
 	free_aligned_static(p_memory);
 	return ret;
+#endif
 }
 
 void Memory::free_aligned_static(void *p_memory) {
+#ifdef USE_MIMALLOC
+	mi_free(p_memory);
+#else
 	uint32_t offset = *((uint32_t *)p_memory - 1);
 	void *p = (void *)((uint8_t *)p_memory - offset);
 	free(p);
+#endif
 }
 
 template <bool p_ensure_zero>
@@ -103,9 +115,17 @@ void *Memory::alloc_static(size_t p_bytes, bool p_pad_align) {
 
 	void *mem;
 	if constexpr (p_ensure_zero) {
+#ifdef USE_MIMALLOC
+		mem = mi_calloc(1, p_bytes + (prepad ? DATA_OFFSET : 0));
+#else
 		mem = calloc(1, p_bytes + (prepad ? DATA_OFFSET : 0));
+#endif
 	} else {
+#ifdef USE_MIMALLOC
+		mem = mi_malloc(p_bytes + (prepad ? DATA_OFFSET : 0));
+#else
 		mem = malloc(p_bytes + (prepad ? DATA_OFFSET : 0));
+#endif
 	}
 
 	ERR_FAIL_NULL_V(mem, nullptr);
@@ -156,12 +176,20 @@ void *Memory::realloc_static(void *p_memory, size_t p_bytes, bool p_pad_align) {
 #endif
 
 		if (p_bytes == 0) {
+#ifdef USE_MIMALLOC
+			mi_free(mem);
+#else
 			free(mem);
+#endif
 			return nullptr;
 		} else {
 			*s = p_bytes;
 
+#ifdef USE_MIMALLOC
+			mem = (uint8_t *)mi_realloc(mem, p_bytes + DATA_OFFSET);
+#else
 			mem = (uint8_t *)realloc(mem, p_bytes + DATA_OFFSET);
+#endif
 			ERR_FAIL_NULL_V(mem, nullptr);
 
 			s = (uint64_t *)(mem + SIZE_OFFSET);
@@ -171,7 +199,11 @@ void *Memory::realloc_static(void *p_memory, size_t p_bytes, bool p_pad_align) {
 			return mem + DATA_OFFSET;
 		}
 	} else {
+#ifdef USE_MIMALLOC
+		mem = (uint8_t *)mi_realloc(mem, p_bytes);
+#else
 		mem = (uint8_t *)realloc(mem, p_bytes);
+#endif
 
 		ERR_FAIL_COND_V(mem == nullptr && p_bytes > 0, nullptr);
 
@@ -198,9 +230,17 @@ void Memory::free_static(void *p_ptr, bool p_pad_align) {
 		mem_usage.sub(*s);
 #endif
 
+#ifdef USE_MIMALLOC
+		mi_free(mem);
+#else
 		free(mem);
+#endif
 	} else {
+#ifdef USE_MIMALLOC
+		mi_free(mem);
+#else
 		free(mem);
+#endif
 	}
 }
 

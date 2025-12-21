@@ -108,10 +108,14 @@ void operator delete(void *p_mem, void *(*p_allocfunc)(size_t p_size));
 void operator delete(void *p_mem, void *p_pointer, size_t check, const char *p_description);
 #endif
 
+#ifdef USE_MIMALLOC
+#include "drivers/mimalloc/memory_wrapper.h"
+#else
 #define memalloc(m_size) Memory::alloc_static(m_size)
 #define memalloc_zeroed(m_size) Memory::alloc_static_zeroed(m_size)
 #define memrealloc(m_mem, m_size) Memory::realloc_static(m_mem, m_size)
 #define memfree(m_mem) Memory::free_static(m_mem)
+#endif
 
 _ALWAYS_INLINE_ void postinitialize_handler(void *) {}
 
